@@ -1,0 +1,1146 @@
+---
+title: "Stormwater Denitrification"
+author: "Ariane L. Peralta, Mario E. Muscarella, Eban Bean"
+date: "Last updated on `r format(Sys.time(), '%d %B, %Y')`"
+header-includes:
+  - \usepackage{array}
+  - \usepackage{graphics}
+  - \usepackage[utf8]{inputenc}
+output:
+  pdf_document:
+  fig_caption: true
+---
+
+Project Description:
+Is there a phylogenetic diversity-functioning relationship in this urban stream ecosystem? 
+Does magnitude of function influence diversity-function relationship?
+Does sample type (sed vs. water) matter?
+
+# Initial Setup
+```{r, results="hide", message=FALSE}
+rm(list=ls())
+setwd("~/GitHub/Denitrification_Enzyme_Assays/TownCreek/StormwaterDenitrification_Bean2015/analyses/")
+se <- function(x, ...){sd(x, na.rm = TRUE)/sqrt(length(na.omit(x)))}
+ci <- function(x, ...){1.96 * sd(x,na.rm = TRUE)}
+
+# Code Dependencies
+source("../bin/MothurTools.R"); source("../bin/DiversityFunctions.R")
+require("labdsv"); require("vegan"); require("reshape2")
+require("dplyr"); require("ggplot2"); require("nlme")
+require("ade4"); require("grid"); require("png")
+require("ape"); require("picante")
+require("cowplot") #combining plots
+require("ggpubr")
+require("glue")
+require("stringr")
+require("ggpmisc")
+```
+# Water Quality Data
+```{r}
+layout(matrix(c(1,2, 3), 1, 3, byrow = TRUE), widths = c(2, 2, 2))
+## show the regions that have been allocated to each plot
+layout.show(3)
+
+# Import Data - water quality
+chem <- read.delim("../data/WQ_DEA_separate/2015_TC_WaterQualityData.txt")
+chem$Replicate <- as.factor(chem$Replicate)
+
+#plot NH4
+p <- ggplot(chem, aes(x=Location, y=NH4, color=as.factor(Storm))) + geom_boxplot() +
+      geom_point(aes(color=factor(Storm)), size=2, position = position_jitterdodge()) +   
+      scale_color_manual(name="Time", 
+                         values=c("cyan", "darkblue"), 
+                         labels = c("baseflow", "stormflow")) 
+ammonium <- p + theme_bw() + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.line 
+          =element_line(colour = "black")) + 
+    theme(axis.title=element_text(vjust=1,size=14,face="bold"),
+          axis.text=element_text(size=14), axis.text.x = element_text(vjust=0.65, hjust=0.5, 
+          size=14), panel.border = element_rect(colour = "black",size=1)) + 
+    theme(axis.ticks.length=unit(0.3,"cm")) + labs(x = "", 
+          y = (expression(paste("(mg/L)")))) + 
+    theme(strip.text.x = element_text(size=14, face="bold"), strip.text.y =   
+          element_text(size=14, face="bold"), strip.background = element_rect(colour="black",
+          fill="white", size=1)) +ggtitle("Ammonium-N")
+ammonium
+#ggsave("../figures/water_ammonium_boxplot.png", plot=last_plot(), device=NULL, path=NULL, scale=1, width=7, height=5, dpi=300, limitsize=TRUE)
+
+#plot NO3.NO2
+p <- ggplot(chem, aes(x=Location, y=NO3.NO2, color=as.factor(Storm))) + geom_boxplot() +
+      geom_point(aes(color=factor(Storm)), size=2, position = position_jitterdodge()) +   
+      scale_color_manual(name="Time", 
+                         values=c("cyan", "darkblue"), 
+                         labels = c("baseflow", "stormflow")) 
+nitrate <- p + theme_bw() + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.line 
+          =element_line(colour = "black")) + 
+    theme(axis.title=element_text(vjust=1,size=14,face="bold"),
+          axis.text=element_text(size=14), axis.text.x = element_text(vjust=0.65, hjust=0.5, 
+          size=14), panel.border = element_rect(colour = "black",size=1)) + 
+    theme(axis.ticks.length=unit(0.3,"cm")) + labs(x = "", 
+          y = (expression(paste("")))) + 
+    theme(strip.text.x = element_text(size=14, face="bold"), strip.text.y =   
+          element_text(size=14, face="bold"), strip.background = element_rect(colour="black",
+          fill="white", size=1))+ggtitle("Nitrate+Nitrite-N")
+nitrate
+#ggsave("../figures/water_nitrate_boxplot.png", plot=last_plot(), device=NULL, path=NULL, scale=1, width=7, height=5, dpi=300, limitsize=TRUE)
+
+#plot TDN
+p <- ggplot(chem, aes(x=Location, y=TDN, color=as.factor(Storm))) + geom_boxplot() +
+      geom_point(aes(color=factor(Storm)), size=2, position = position_jitterdodge()) +   
+      scale_color_manual(name="Time", 
+                         values=c("cyan", "darkblue"), 
+                         labels = c("baseflow", "stormflow")) 
+TDN <- p + theme_bw() + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.line 
+          =element_line(colour = "black")) + 
+    theme(axis.title=element_text(vjust=1,size=14,face="bold"),
+          axis.text=element_text(size=14), axis.text.x = element_text(vjust=0.65, hjust=0.5, 
+          size=14), panel.border = element_rect(colour = "black",size=1)) + 
+    theme(axis.ticks.length=unit(0.3,"cm")) + labs(x = "Location", 
+          y = (expression(paste("(mg/L)")))) + 
+    theme(strip.text.x = element_text(size=14, face="bold"), strip.text.y =   
+          element_text(size=14, face="bold"), strip.background = element_rect(colour="black",
+          fill="white", size=1)) +ggtitle("Total Dissolved Nitrogen")
+TDN
+#ggsave("../figures/water_TDN_boxplot.png", plot=last_plot(), device=NULL, path=NULL, scale=1, width=7, height=5, dpi=300, limitsize=TRUE)
+
+#plot DOC
+p <- ggplot(chem, aes(x=Location, y=DOC, color=as.factor(Storm))) + geom_boxplot() +
+      geom_point(aes(color=factor(Storm)), size=2, position = position_jitterdodge()) +   
+      scale_color_manual(name="Time", 
+                         values=c("cyan", "darkblue"), 
+                         labels = c("baseflow", "stormflow")) 
+DOC <- p + theme_bw() + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.line 
+          =element_line(colour = "black")) + 
+    theme(axis.title=element_text(vjust=1,size=14,face="bold"),
+          axis.text=element_text(size=14), axis.text.x = element_text(vjust=0.65, hjust=0.5, 
+          size=14), panel.border = element_rect(colour = "black",size=1)) + 
+    theme(axis.ticks.length=unit(0.3,"cm")) + labs(x = "Location", 
+          y = (expression(paste("")))) + 
+    theme(strip.text.x = element_text(size=14, face="bold"), strip.text.y =   
+          element_text(size=14, face="bold"), strip.background = element_rect(colour="black",
+          fill="white", size=1)) +ggtitle("Dissolved Organic Carbon")
+DOC
+#ggsave("../figures/water_DOC_boxplot.png", plot=last_plot(), device=NULL, path=NULL, scale=1, width=7, height=5, dpi=300, limitsize=TRUE)
+```
+#combine WQ graphs
+```{r Loading Files, include=FALSE}
+# remove legends and axes
+n1 <-ammonium + theme(legend.position="none") + rremove("x.text")
+n2 <- nitrate + theme(legend.position="none") + rremove("x.text")
+n3 <- TDN + theme(legend.position="none")
+n4 <- DOC + theme(legend.position="none")
+
+# align all plots vertically
+plots <- align_plots(n1,n2,n3,n4, align = 'v', axis = 'l')
+
+# combine graphs
+n5 <- plot_grid(plots[[1]],plots[[2]],plots[[3]],plots[[4]], labels = c("A","B","C","D"), label_size = 16, ncol=2, align='v') 
+
+legend <- get_legend(ammonium)
+
+ggdraw(plot_grid(plot_grid(n5),
+                 plot_grid(NULL, legend, ncol=1),
+                 rel_widths=c(1, 0.2)))
+
+#ggsave("../figures/WQ_combined.png", plot=last_plot(), device=NULL, path=NULL, scale=1,  width=10, height=6, dpi=300, limitsize=TRUE)
+```
+
+# Import Data Files
+## Experimental Design File
+```{r}
+# Import Environmental Data
+design <- read.delim("../data/TC.design.txt", row.names = 1)
+```
+
+## Microbial Data
+```{r}
+# Import OTU data
+# Import Raw Data
+#otu.in.old <- read.otu("../data/TC.bac.final.shared") #original Mothur run
+otu.in <- read.otu("../data/Mothur2024/scm.trim.contigs.good.unique.good.filter.unique.precluster.denovo.vsearch.pick.opti_mcc.shared")
+
+#Correct 2024 Mothur otu rownames:
+rownames(otu.in) <- gsub("GSF1058_", "", rownames(otu.in))
+rownames(otu.in) <- gsub("_0", "_", rownames(otu.in))
+
+# Remove TarPam samples:
+otu.in <- otu.in[1:52,]
+
+# Correct Sample IDs and Subset Original Design File
+rownames(design) <- gsub("^ECU_", "", rownames(design))
+rownames(design) <- gsub("_0", "_", rownames(design))
+rownames(design) <- gsub("_0", "_", rownames(design))
+
+design.otu <- design[which(rownames(design) %in% rownames(otu.in)), ]
+all.equal(rownames(otu.in), rownames(design.otu))
+
+# Remove OTUs with less than two occurrences across all sites
+otus <- otu.in[, which(colSums(otu.in) >= 2)]
+
+# Make Presence Absence Matrix
+dataPA <- (otus > 0) * 1
+
+# Import Taxonomy File
+#otu.tax <- read.tax(taxonomy = "../data/TC.bac.final.0.03.taxonomy",
+                   #format = "rdp", tax.levels = 6, col.tax = 3)
+
+otu.tax <- read.tax(taxonomy = "../data/Mothur2024/scm.trim.contigs.good.unique.good.filter.unique.precluster.denovo.vsearch.pick.opti_mcc.0.03.cons.taxonomy", format = "rdp", tax.levels = 6, col.tax = 3)
+```
+
+# Diversity Metrics - Hypothesis Testing - baseflow only (sed and water)
+```{r Diversity Metrics - Bacteria, echo=TRUE}
+# Rarefy Abundances (min abundance is 7172. We are sampling to 7100)
+#baseflow only
+df.design.otus <-cbind(design.otu,otus)
+as.data.frame(df.design.otus)
+df.baseflow <- subset(df.design.otus, Storm == "baseflow")
+
+otus <- df.baseflow[,-c(1:6)]
+design.baseflow <- df.baseflow[,c(1:6)]
+
+min(rowSums(otus))
+otus.r <- rrarefy(otus, 7100)
+
+# Fisher's Alpha
+fisher <- fisher.alpha(otus.r)
+
+# Species Richness
+richness <- rowSums((otus.r >= 1))
+
+# Shannon Diversity
+shannon <- diversity(otus.r, "shannon")
+
+# Simpson's Evenness
+simp.even <- apply(otus.r, 1, simp_even)
+
+#Pielou’s evenness
+J <- shannon/log(specnumber(otus.r[,-c(1:1)]))
+
+#combined richness, diversity, evenness
+diversity <- cbind(design.baseflow,richness,shannon,simp.even,J)
+#write.csv(diversity,"../data/diversity.bact.raw.csv")
+```
+
+#Plot OTU richness - baseflow - sed + water
+```{r Plot - Shannon Diversity, echo=TRUE}
+diversity2 <- diversity[diversity$Storm =="baseflow",]
+baseflow.diversity <- diversity2[diversity2$Location !="A",]
+
+# # ANOVA - update
+aov.bf=aov(richness~Location*Sample_Type,data=baseflow.diversity)
+summary(aov.bf)
+posthocD <-TukeyHSD(aov.bf,"Location:Sample_Type",conf.level=0.95)
+posthocD
+
+# Graphing OTU richness
+p <- ggplot(baseflow.diversity, aes(x=Location, y=richness, color=as.factor(Sample_Type))) + geom_boxplot() +
+      geom_point(aes(color=factor(Sample_Type)), size=2, position = position_jitterdodge()) +   
+      scale_color_manual(name="Sample Type", 
+                         values=c("brown", "orange", "darkblue"), 
+                         labels = c("stream bed", "stream bank", "water")) 
+p + theme_bw() + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.line 
+          =element_line(colour = "black")) + 
+    theme(axis.title=element_text(vjust=1,size=14,face="bold"),
+          axis.text=element_text(size=14), axis.text.x = element_text(vjust=0.65, hjust=0.5, 
+          size=14), panel.border = element_rect(colour = "black",size=1)) + 
+    theme(axis.ticks.length=unit(0.3,"cm")) + labs(x = "Location", y = "OTU richness") + 
+    theme(strip.text.x = element_text(size=14, face="bold"), strip.text.y =   
+          element_text(size=14, face="bold"), strip.background = element_rect(colour="black",
+          fill="white", size=1)) +
+    scale_x_discrete(breaks=c("B", "C", "D"), labels=c("downstream (B)", "middle (C)", "upstream (D)"))
+
+#ggsave("../figures/baseflow_OTUrichness_boxplots.png", plot=last_plot(), device=NULL, path=NULL, scale=1, width=7, height=5, dpi=300, limitsize=TRUE)
+```
+
+# Simple Hypothesis Testing Bacterial Community Composition - baseflow only
+```{r}
+#PERMANOVA on baseflow only
+
+# Make Relative Abundance Matrix
+otus <- df.baseflow[,-c(1:6)]
+design.bf <- df.baseflow[,c(1:6)]
+
+relabun <- otus
+for (i in 1:dim(otus)[1]) {
+  relabun[i, ] <- otus[i, ]/sum(otus[i,])
+}
+
+df.baseflow <-cbind(design.bf, relabun)
+
+#df.baseflow
+adonis = adonis2(df.baseflow[,-c(1:6)] ~ Sample_Type, method = "bray", data = df.baseflow, perm=1000)
+adonis
+```
+## Principal Coordinates Ordination - baseflow only
+```{r}
+# Principal Coordinates Analysis
+sampleREL.dist <- vegdist(df.baseflow[,-c(1:6)], method="bray")
+
+TC_pcoa <- cmdscale(sampleREL.dist, k=2, eig=TRUE, add=FALSE)
+  # Classical (Metric) Multidimensional Scaling; returns PCoA coordinates
+  # eig=TRUE returns eigenvalues; k = # of dimensions to calculate
+
+explainvar1 <- round(TC_pcoa$eig[1] / sum(TC_pcoa$eig), 3) * 100
+explainvar2 <- round(TC_pcoa$eig[2] / sum(TC_pcoa$eig), 3) * 100
+sum.eig <- sum(explainvar1, explainvar2)
+explainvar1 #29.3
+explainvar2 #20.8
+
+points <- cbind(as.data.frame(TC_pcoa$points), df.baseflow$Sample_Type)
+pcoa.L.centroids <- melt(points, id="df.baseflow$Sample_Type", measure.vars = c("V1", "V2"))
+pcoa.centroids <- cast(pcoa.L.centroids, variable ~ df.baseflow$Sample_Type, mean)
+pcoa.centroids.se <- cast(pcoa.L.centroids, variable ~ df.baseflow$Sample_Type, se)
+pcoa.centroids.sd <- cast(pcoa.L.centroids, variable ~ df.baseflow$Sample_Type, sd)
+```
+
+## Principal Coordinates Ordination - baseflow only
+```{r Ordination (PCoA) - Bacteria, include=FALSE}
+# Combine
+trt <- c("BD","BK","W")
+pcoa.cent.dataframe <- cbind(t(pcoa.centroids), t(pcoa.centroids.se))
+colnames(pcoa.cent.dataframe) <- c("V1", "V2", "V1e", "V2e")
+pcoa.cent.treats <- rownames(pcoa.cent.dataframe)
+pcoa.cent.dataframe.trts <- as.data.frame(pcoa.cent.dataframe)
+pcoa.cent.dataframe.trts$trt <- as.factor(trt)
+
+#Plot
+df1a <- as.data.frame(pcoa.cent.dataframe.trts)
+
+plot1a <- ggplot(df1a, aes(x=V1, y=V2, colour=trt, shape = trt, label = trt)) + theme_bw() + theme(panel.grid.major = element_blank(), 
+              panel.grid.minor = element_blank(), 
+              axis.line = element_line(colour = "black")) + 
+              theme(panel.background = element_blank()) + 
+geom_point(aes(colour=trt), size=5, stroke = 1.25, show.legend = TRUE) + 
+geom_text(hjust = 0, nudge_x = 0.05) +
+geom_errorbarh(aes(xmax=V1+V1e, xmin=V1-V1e, height=0.01), colour="black") + 
+geom_errorbar(aes(ymax=V2+V2e, ymin=V2-V2e, width=0.01), colour="black") +
+scale_colour_manual(labels = c("stream bed", "stream bank", "water"), 
+                    values = c("gray40", "gray40", "gray40")) + 
+scale_shape_manual(labels = c("stream bed", "stream bank", "water"), values = c(17,15,19)) +
+      theme(axis.title = element_text(size=14), axis.text = element_text(size=14),
+          axis.text.x = element_text(size=14), 
+          panel.border = element_rect(colour = "black", size = 1.25)) + 
+      theme(axis.ticks.length = unit(0.3, "cm")) + 
+          xlab(glue("PCoA 1 ({explainvar1}%)")) + ylab(glue("PCoA 2 ({explainvar2}%)")) +
+          labs(shape = "Sample Type") +
+          guides(shape = guide_legend(override.aes = list(size = 4, color="gray40")), color = "none")
+
+plot1a
+
+#ggsave("../figures/TC_ordination_type_baseflow.png", plot=last_plot(), device=NULL, path=NULL, scale=1, width=7, height=5, dpi=300, limitsize=TRUE)
+```
+
+## Principal Coordinates Ordination - baseflow only (with envfit)
+```{r}
+# Principal Coordinates Analysis
+sampleREL.dist <- vegdist(df.baseflow[,-c(1:6)], method="bray")
+
+TC_pcoa <- cmdscale(sampleREL.dist, k=2, eig=TRUE, add=FALSE)
+  # Classical (Metric) Multidimensional Scaling; returns PCoA coordinates
+  # eig=TRUE returns eigenvalues; k = # of dimensions to calculate
+
+explainvar1 <- round(TC_pcoa$eig[1] / sum(TC_pcoa$eig), 3) * 100
+explainvar2 <- round(TC_pcoa$eig[2] / sum(TC_pcoa$eig), 3) * 100
+sum.eig <- sum(explainvar1, explainvar2)
+explainvar1 #29.3
+explainvar2 #20.8
+
+points <- cbind(as.data.frame(TC_pcoa$points), df.baseflow$Sample_Type)
+pcoa.L.centroids <- melt(points, id="df.baseflow$Sample_Type", measure.vars = c("V1", "V2"))
+pcoa.centroids <- cast(pcoa.L.centroids, variable ~ df.baseflow$Sample_Type, mean)
+pcoa.centroids.se <- cast(pcoa.L.centroids, variable ~ df.baseflow$Sample_Type, se)
+pcoa.centroids.sd <- cast(pcoa.L.centroids, variable ~ df.baseflow$Sample_Type, sd)
+
+# Combine
+trt <- c("BD","BK","W")
+pcoa.cent.dataframe <- cbind(t(pcoa.centroids), t(pcoa.centroids.se))
+colnames(pcoa.cent.dataframe) <- c("V1", "V2", "V1e", "V2e")
+pcoa.cent.treats <- rownames(pcoa.cent.dataframe)
+pcoa.cent.dataframe.trts <- as.data.frame(pcoa.cent.dataframe)
+pcoa.cent.dataframe.trts$trt <- as.factor(trt)
+pcoa.cent.dataframe.trts$centroid_or_sample <- "centroid"
+```
+
+```{r}
+# Add in points to data frame:
+pcoa.points_ForPlot <- points
+colnames(pcoa.points_ForPlot) <- c("V1", "V2", "trt")
+# Add labels to match ...cent.dataframe.trts
+pcoa.points_ForPlot$trt <- pcoa.points_ForPlot$trt
+
+#add V1e and V2e as zeros:
+pcoa.points_ForPlot$V1e <- numeric(30)
+pcoa.points_ForPlot$V2e <- numeric(30)
+# Add column to distinguish sample points from centroids, and later use to set alpha in plot
+pcoa.points_ForPlot$centroid_or_sample <- "sample"
+
+#Merge:
+centroids_points_merged <- rbind(pcoa.cent.dataframe.trts, pcoa.points_ForPlot)
+```
+
+```{r envfit}
+# Import Data - water quality
+WaterSed.chem <- read.delim("../data/TC_WaterSed_ChemDEA.txt")
+WaterSed.chem$Field_replicate <- as.factor(WaterSed.chem$Field_replicate)
+# Subset, TC01 through TC30:
+WaterSed.chem_envfit <- WaterSed.chem[1:30,]
+# SampleID as rowname:
+rownames(WaterSed.chem_envfit) <- rownames(points)
+# Select only NH4, NO3, and Denit acet:
+WaterSed.chem_envfit <- WaterSed.chem_envfit %>% select(c("NH4", "NO3", "DEArate_ACET"))
+
+#Run envfit with new Soil data (SSF = Soil Start & Finish):
+fit_denit_chem <- envfit(TC_pcoa$points, WaterSed.chem_envfit, permutations = 10000, set.seed(42))
+fit_denit_chem
+
+A_denit_chem <-as.list(fit_denit_chem$vectors)
+vec_denit_chem <- as.data.frame(fit_denit_chem$vectors$arrows*sqrt(fit_denit_chem$vectors$r)*0.2)
+p_denit_chem <- as.data.frame(A_denit_chem$pvals)
+vec_denit_chem <- cbind(vec_denit_chem, p_denit_chem)
+vec_denit_chem <- subset(vec_denit_chem, A_denit_chem$pvals<=0.05)
+
+vec_denit_chem$labels <- c(expression(paste("NH"[4]^{"+"})), expression(paste("NO"[3]^{"-"})), "denitrification potential")
+
+# Add x and y adjustment for labels:
+vec_denit_chem$xDim <- vec_denit_chem$Dim1 + c(-.055,.02,-.01)
+vec_denit_chem$yDim <- vec_denit_chem$Dim2 + c(.027,.021,-.034)
+```
+
+```{r}
+#Plot
+df2a <- as.data.frame(centroids_points_merged)
+
+plot2a <- ggplot(df2a, aes(x=V1, y=V2))+
+  geom_errorbarh(aes(xmax=V1+V1e, xmin=V1-V1e, height=0.01), colour="black") +    
+  geom_errorbar(aes(ymax=V2+V2e, ymin=V2-V2e, width=0.01), colour="black") +   
+  geom_point(aes(shape=trt, color=trt, alpha = centroid_or_sample, size=centroid_or_sample)) +  
+  theme_bw() +
+  scale_size_manual(values = c(20, 10), name = "Centroid or Sample")+
+  scale_alpha_manual(values = c(1, 0.3), name = "Centroid or Sample")+
+  scale_color_manual(values=c("#D55E00", "#009E73", "#0072B2"), name="Sample Type", labels = c("streambed", "streambank", "water")) +
+  scale_shape_manual(values = c(17,15,19), name = "Sample Type", labels = c("streambed", "streambank", "water")) +
+  xlab(glue("PCoA 1 ({explainvar1}%)")) + ylab(glue("PCoA 2 ({explainvar2}%)")) + 
+  geom_segment(data=vec_denit_chem, aes(x=0,xend=Dim1,y=0,yend=Dim2), linewidth=4, arrow = arrow(length = unit(0.6, "cm")),colour="black", alpha = 1, inherit.aes=F)+ 
+ geom_text(data=vec_denit_chem, aes(x=xDim, y=yDim), label= vec_denit_chem$labels, size=15, inherit.aes=F)+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+  theme(panel.background = element_blank()) + 
+  theme(axis.title = element_text(size=40), axis.text=element_text(size=40), 
+          axis.text.x = element_text(size=40),  axis.text.y = element_text(size=40),
+          panel.border = element_rect(colour = "black", linewidth=1.25)) +
+  theme(axis.ticks.length=unit(0.3,"cm")) + 
+  theme(plot.title=element_text(size=40)) +
+  theme(legend.text=element_text(size=40), legend.title = element_text(size=40))+
+  #guides(size = guide_legend(6))+
+  ggtitle("")+
+  guides(shape = guide_legend(override.aes = list(size = 20)))
+
+plot2a
+
+
+#ggsave("../figures/ASM_2024/TC_ordination_type_baseflow_envfit.png", plot=plot2a, device=NULL, path=NULL, scale=1, width=10, height=7, dpi=300, limitsize=TRUE)
+
+# For ASM 2024 poster:
+ggsave("../../../../../Desktop/ASM_2024_creativeCloud/CurrentPosterDraft/BiggerRFigs/PCoA.png", plot=plot2a, device=NULL, path=NULL, scale=1, width=18, height=12, dpi=600, limitsize=F)
+```
+
+# Bacterial community indicator species - baseflow only
+```{r Bacteria Indicator Species, include=FALSE}
+#df.baseflow <-cbind(design.bf, relabun)
+design.type <- df.baseflow$Sample_Type
+dataREL.t <- df.baseflow[,-c(1:6)]
+
+dataREL <- dataREL.t[, colSums(dataREL.t) > 0.05]
+bac.ind <- indval(dataREL, design.type)
+levels(design.type)
+summary(bac.ind)
+
+inds <- which(bac.ind$pval <= 0.05)
+bac.indicators <- as.data.frame(matrix(NA, nrow = length(inds), ncol = 4))
+colnames(bac.indicators) <- c("OTU", "Cluster", "IndVal", "Prob")
+
+bac.indicators$OTU <- names(inds)
+bac.indicators$Cluster <- bac.ind$maxcls[inds]
+bac.indicators$IndVal <- bac.ind$indcls[inds]
+bac.indicators$Prob <- bac.ind$pval[inds]
+
+ind.tax <- otu.tax[which(as.character(otu.tax$OTU) %in% bac.indicators$OTU), ]
+ind.tax <- ind.tax[match(ind.tax$OTU, bac.indicators$OTU), ]
+
+indicator.bac <- cbind(bac.indicators, ind.tax[, -c(1)])
+
+indicator.bac <- indicator.bac[order(as.numeric(indicator.bac$Cluster)), ]
+
+table(indicator.bac$Cluster)
+table(indicator.bac$Phylum)
+table(indicator.bac$Cluster)
+levels(design.type)
+
+# Export Bacteria Indicator Table
+#write.table(indicator.bac, "../data/BacterialIndicators_baseflow.txt", sep="\t", row.names = F, quote = F)
+```
+
+## Phylogenetic Tree and UniFrac Distance Matrix - did not run unifrac PCoA
+```{r}
+# Import Tree
+tree <- read.tree("../data/TC.bac.rename.tree")
+
+tree$tip.label[1:5]
+tree$tip.label <- gsub("\\|", "", tree$tip.label)
+
+# Import Unifrac Matrix
+unifrac.raw <- read.delim("../data/TC.bac.tree1.weighted.phylip.dist",
+                             header = F, skip = 1, row.names = 1)
+
+row.names(unifrac.raw) <- gsub("     ", "", row.names(unifrac.raw))
+
+unifrac <- unifrac.raw[which(row.names(unifrac.raw) %in%
+                                   row.names(otus)),
+                             which(row.names(unifrac.raw) %in%
+                                   row.names(otus))]
+
+rownames(unifrac) <- gsub("     ", "", row.names(unifrac))
+colnames(unifrac) <- rownames(unifrac)
+dim(unifrac)
+
+# Make into Distance Matrix
+unifrac.dist <- as.dist(unifrac, upper = T, diag = T)
+```
+
+## Notes: Phylogenetic Analysis
+```{sh, eval = F}
+# The following was done outside of R
+python ../bin/name_change.py TC.bac.final.0.03.rep.fasta TC.bac.final.0.03.rep.rename.fasta
+
+# This version is needed for Mothur
+FastTree -gtr -nt -gamma -fastest TC.bac.final.0.03.rep.fasta > TC.bac.tree
+
+# This version is needed for R analysis
+FastTree -gtr -nt -gamma -fastest TC.bac.final.0.03.rep.rename.fasta > TC.bac.rename.tree
+
+Mothur (v 1.39.5)
+system(cp ./TC.trim.contigs.good.unique.good.filter.good.unique.precluster.pick.pick.opti_mcc.unique_list.0.03.rep.fasta ./TC.bac.final.0.03.rep.fasta)
+system(cp ./TC.trim.contigs.good.unique.good.filter.good.unique.precluster.pick.pick.opti_mcc.unique_list.0.03.rep.count_table ./TC.bac.final.count)
+unifrac.weighted(tree=TC.bac.tree, count=TC.bac.final.count, distance=square, processors=8)
+
+Output File Names:
+TC.bac.treewsummary
+TC.bac.tree1.weighted.phylip.dist
+```
+
+# Phylogenetic Diversity
+```{r Phylogenetic Diversity, include=FALSE}
+# Reorder Tree
+which(tree$edge.length < 0.0000001)
+#tree.2 <- reorder(tree, order = "cladewise")
+#tree.r <- midpoint.root(tree.2)
+#phylo.d <- pd(otus.r, tree, include.root = F) #does this have to be rarefied? CHECK***
+
+#otus <- df.baseflow[,-c(1:6)]
+#design.baseflow <- df.baseflow[,c(1:6)]
+
+phylo.d <- pd(otus, tree, include.root = F)
+
+design.r <- design.baseflow[which(rownames(design.baseflow) %in% rownames(otus)), ]
+
+
+design.bf.bcd <- design.r[design.r$Location != "A", ]
+
+bf.bac <- as.data.frame(matrix(NA, dim(design.bf.bcd)[1], 10))
+colnames(bf.bac) <- c("Sample", "Location", "Time", "Type", "Replicate", 
+                       "S", "F_alpha", "S_even", "Shannon", "Phylo")
+bf.bac$Sample <- rownames(design.bf.bcd)
+bf.bac$Location <- design.bf.bcd$Location
+bf.bac$Time <- design.bf.bcd$Storm
+bf.bac$Type <- design.bf.bcd$Sample_Type
+bf.bac$Replicate <- design.bf.bcd$Field_replicate
+for(i in 1:length(rownames(design.bf.bcd))){
+  temp <- rownames(design.bf.bcd)[i]
+  bf.bac$S[i] <- richness[which(names(richness) == temp)]
+  bf.bac$F_alpha[i] <- fisher[which(names(fisher) == temp)]
+  bf.bac$S_even[i] <- simp.even[which(names(simp.even) == temp)]
+  bf.bac$Shannon[i] <- shannon[which(names(shannon) == temp)]
+  bf.bac$Phylo[i] <- phylo.d[which(rownames(phylo.d) == temp), 1]
+}
+
+# Reorganize
+#bf.bac.m <- melt(bf.bac, id = c("Sample", "Location", "Time", "Type"))
+#bf.bac.c <- cast(data = bf.bac.m, Location + Type ~ variable, c(mean, se), na.rm=T)
+
+#bf.bac.c <- as.data.frame(bf.bac.c)
+#bf.bac.m <- as.data.frame(bf.bac.m)
+
+# # ANOVA - update
+aov.sed=aov(Phylo~Location*Type,data=bf.bac)
+summary(aov.sed)
+posthocD <-TukeyHSD(aov.sed,"Location:Type",conf.level=0.95)
+posthocD
+```
+
+# Phylo Diversity Plots
+```{r}
+#boxplots
+#phylo.d <- pd(otus.r, tree, include.root = F)
+#design.r <- design.bf[which(rownames(design.bf) %in% rownames(otus.r)), ]
+#df.design.phylo <- cbind(design.r,phylo.d)
+
+p <- ggplot(bf.bac, aes(x=Location, y=Phylo, color=as.factor(Type))) + geom_boxplot() +
+      geom_point(aes(color=factor(Type)), size=2, position = position_jitterdodge()) +   
+      scale_color_manual(name="Location", 
+                         values=c("brown", "orange", "darkblue"), 
+                         labels = c("stream bed", "stream bank", "water")) 
+p + theme_bw() + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.line 
+          =element_line(colour = "black")) + 
+    theme(axis.title=element_text(vjust=1,size=14,face="bold"),
+          axis.text=element_text(size=14), axis.text.x = element_text(vjust=0.65, hjust=0.5, 
+          size=14), panel.border = element_rect(colour = "black",size=1)) + 
+    theme(axis.ticks.length=unit(0.3,"cm")) + labs(x = "Location", y = "Phylogenetic Diversity") + 
+    theme(strip.text.x = element_text(size=14, face="bold"), strip.text.y =   
+          element_text(size=14, face="bold"), strip.background = element_rect(colour="black",
+          fill="white", size=1)) +
+    scale_x_discrete(breaks=c("B", "C", "D"), labels=c("downstream (B)", "middle (C)", "upstream (D)"))
+
+#ggsave("../figures/baseflow_PD_boxplots.png", plot=last_plot(), device=NULL, path=NULL, scale=1, width=7, height=5, dpi=300, limitsize=TRUE)
+```
+# Sediment Ammonium and Nitrate Plots
+```{r}
+# Import Data - water quality
+WaterSed.chem <- read.delim("../data/TC_WaterSed_ChemDEA.txt")
+WaterSed.chem$Field_replicate <- as.factor(WaterSed.chem$Field_replicate)
+
+Sed.chem <- subset(WaterSed.chem, Sample_Type == "BD" | Sample_Type == "BK")
+dim(Sed.chem) 
+
+p <- ggplot(Sed.chem, aes(x=Location, y=SED.NH4.N.ug.N.g.1.soil, color=as.factor(Sample_Type))) + geom_boxplot() +
+      geom_point(aes(color=factor(Sample_Type)), size=2, position = position_jitterdodge()) +   
+      scale_color_manual(name="Location", 
+                         values=c("brown", "orange"), 
+                         labels = c("stream bed", "stream bank")) 
+n1 <- p + theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.line =element_line(colour = "black")) + theme(axis.title=element_text(vjust=1,size=14,face="bold"), axis.text=element_text(size=14), axis.text.x = element_text(vjust=0.65, hjust=0.5, size=14), panel.border = element_rect(colour = "black",size=1)) + theme(axis.ticks.length=unit(0.3,"cm")) + labs(x = "", y = (expression(paste("Ammonium-N (",mu,"g NH"[4]^+{},"-N"," g"^-{1},"soil)")))) + theme(strip.text.x = element_text(size=14, face="bold"), strip.text.y = element_text(size=14, face="bold"), strip.background = element_rect(colour="black", fill="white", size=1)) + scale_x_discrete(breaks=c("B", "C", "D"), labels=c("downstream (B)", "middle (C)", "upstream (D)"))
+
+p2 <- ggplot(Sed.chem, aes(x=Location, y=SED.NO3.N.ug.N.g.1.soil, color=as.factor(Sample_Type))) + geom_boxplot() +
+      geom_point(aes(color=factor(Sample_Type)), size=2, position = position_jitterdodge()) +   
+      scale_color_manual(name="Location", 
+                         values=c("brown", "orange"), 
+                         labels = c("stream bed", "stream bank")) 
+n2 <- p2 + theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.line =element_line(colour = "black")) + theme(axis.title=element_text(vjust=1,size=14,face="bold"), axis.text=element_text(size=14), axis.text.x = element_text(vjust=0.65, hjust=0.5, size=14), panel.border = element_rect(colour = "black",size=1)) + theme(axis.ticks.length=unit(0.3,"cm")) + labs(x = "Location", y = (expression(paste("Nitrate-N (",mu,"g NO"[3]^-{},"-N"," g"^-{1},"soil)")))) + theme(strip.text.x = element_text(size=14, face="bold"), strip.text.y = element_text(size=14, face="bold"), strip.background = element_rect(colour="black", fill="white", size=1)) + scale_x_discrete(breaks=c("B", "C", "D"), labels=c("downstream (B)", "middle (C)", "upstream (D)"))
+
+# remove legends and axes
+n1 <-n1 + theme(legend.position="right", legend.box = "horizontal")+ rremove("x.text")+ theme(legend.text=element_text(size=14),legend.title=element_text(size=14))
+n2 <- n2 + theme(legend.position="right")+ theme(legend.text=element_text(size=14),legend.title=element_text(size=14))
+
+# align all plots vertically
+plots <- align_plots(n1,n2, align = 'v', axis = 'l')
+
+# combine moisture N process graphs
+n3 <- plot_grid(plots[[1]],plots[[2]], labels = c("A","B"), label_size = 16, ncol=1, align='v')
+n3        
+#ggsave("../figures/SedN.png", plot=last_plot(), device=NULL, path=NULL, scale=1,  width=8, height=10, dpi=300, limitsize=TRUE)
+
+
+#ggsave("../figures/baseflow_ammonium_boxplots.png", plot=last_plot(), device=NULL, path=NULL, scale=1, width=7, height=5, dpi=300, limitsize=TRUE)
+```
+
+## Denitrification
+```{r}
+# Import Data
+dat <- read.delim("../data/WQ_DEA_separate/2015_TC_DEArate.txt")
+dat$Replicate <- as.factor(dat$Replicate)
+```
+# Denitrification Plots - baseflow only
+```{r}
+dat0 <- dat[dat$Time == "baseline", ]
+dat1 <- dat0[dat0$Location != "A", ]
+dat2 <- dat1[dat1$Location != "E", ]
+dat.bf.bcd <- dat2[dat2$Location != "F", ]
+
+dim1 <- length(dat.bf.bcd$acetyleneb[dat.bf.bcd$acetyleneb == "-"])
+
+bf.eff <- as.data.frame(matrix(NA, dim1, 4))
+colnames(bf.eff) <- c("Location", "Type", "Replicate", "Rate")
+bf.eff$Location <- dat.bf.bcd$Location[dat.bf.bcd$acetyleneb == "-"]
+bf.eff$Type <- dat.bf.bcd$Type[dat.bf.bcd$acetyleneb == "-"]
+bf.eff$Replicate <- dat.bf.bcd$Replicate[dat.bf.bcd$acetyleneb == "-"]
+bf.eff$Rate <- (dat.bf.bcd$Rate[dat.bf.bcd$acetyleneb == "+"] -
+					   dat.bf.bcd$Rate[dat.bf.bcd$acetyleneb == "-"] )
+
+# Reorganize
+#bf.eff.m <- melt(bf.eff)
+#bf.eff.c <- cast(data = bf.eff.m, Location + Type ~ variable, c(mean, se), na.rm=T)
+
+#bf.eff.c <- as.data.frame(bf.eff.c)
+#bf.eff.m <- as.data.frame(bf.eff.m)
+
+# # ANOVA - update
+aov.bf=aov(Rate~Location*Type,data=bf.eff)
+summary(aov.bf)
+posthocD <-TukeyHSD(aov.bf,"Location:Type",conf.level=0.95)
+posthocD
+
+p <- ggplot(bf.eff, aes(x=Location, y=Rate, color=as.factor(Type))) + geom_boxplot() +
+      geom_point(aes(color=factor(Type)), size=2, position = position_jitterdodge()) +   
+      scale_color_manual(name="Location", 
+                         values=c("brown", "orange", "darkblue"), 
+                         labels = c("stream bed", "stream bank", "water")) 
+p + theme_bw() + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.line 
+          =element_line(colour = "black")) + 
+    theme(axis.title=element_text(vjust=1,size=14,face="bold"),
+          axis.text=element_text(size=14), axis.text.x = element_text(vjust=0.65, hjust=0.5, 
+          size=14), panel.border = element_rect(colour = "black",size=1)) + 
+    theme(axis.ticks.length=unit(0.3,"cm")) + labs(x = "Location", 
+          y = (expression(paste("Denitrification (ng N"[2],"O (g DM)"^-{1}," hr"^-{1},")")))) + 
+    theme(strip.text.x = element_text(size=14, face="bold"), strip.text.y =   
+          element_text(size=14, face="bold"), strip.background = element_rect(colour="black",
+          fill="white", size=1)) +
+    scale_x_discrete(breaks=c("B", "C", "D"), labels=c("downstream (B)", "middle (C)", "upstream (D)"))
+
+#ggsave("../figures/bf_denitrification_boxplot.png", plot=last_plot(), device=NULL, path=NULL, scale=1, width=7, height=5, dpi=300, limitsize=TRUE)
+```
+# Water Denitrification - baseflow + stormflow
+```{r}
+dat.water <- dat[dat$Type == "W", ]
+
+# Deal with negative values
+#dat.water[,7:10][dat.water[,7:10] < 0] <- 0
+
+dim1 <- length(dat.water$acetyleneb[dat.water$acetyleneb == "-"])
+
+wtr.eff <- as.data.frame(matrix(NA, dim1, 4))
+colnames(wtr.eff) <- c("Location", "Time", "Replicate", "Rate")
+wtr.eff$Location <- dat.water$Location[dat.water$acetyleneb == "-"]
+wtr.eff$Time <- dat.water$Time[dat.water$acetyleneb == "-"]
+wtr.eff$Replicate <- dat.water$Replicate[dat.water$acetyleneb == "-"]
+wtr.eff$Rate <- (dat.water$Rate[dat.water$acetyleneb == "+"] -
+					   dat.water$Rate[dat.water$acetyleneb == "-"] )
+
+# Reorganize Data
+#wtr.eff.m <- melt(wtr.eff)
+#wtr.eff.c <- cast(data = wtr.eff.m, Location + Time ~ variable, c(mean, se), na.rm=T)
+
+#wtr.eff.c <- as.data.frame(wtr.eff.c)
+#wtr.eff.m <- as.data.frame(wtr.eff.m)
+
+# # ANOVA - update
+aov.wtr=aov(Rate~Location*Time,data=wtr.eff)
+summary(aov.wtr)
+
+p <- ggplot(wtr.eff, aes(x=Location, y=Rate, color=as.factor(Time))) + geom_boxplot() +
+      geom_point(aes(color=factor(Time)), size=2, position = position_jitterdodge()) +   
+      scale_color_manual(name="Location", 
+                         values=c("cyan", "darkblue"), 
+                         labels = c("baseflow", "stormflow")) 
+p + theme_bw() + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.line 
+          =element_line(colour = "black")) + 
+    theme(axis.title=element_text(vjust=1,size=14,face="bold"),
+          axis.text=element_text(size=14), axis.text.x = element_text(vjust=0.65, hjust=0.5, 
+          size=14), panel.border = element_rect(colour = "black",size=1)) + 
+    theme(axis.ticks.length=unit(0.3,"cm")) + labs(x = "Location", 
+          y = (expression(paste("Denitrification (ng N"[2],"O (g DM)"^-{1}," hr"^-{1},")")))) + 
+    theme(strip.text.x = element_text(size=14, face="bold"), strip.text.y =   
+          element_text(size=14, face="bold"), strip.background = element_rect(colour="black",
+          fill="white", size=1))
+    #scale_x_discrete(breaks=c("A","B","C", "D","E","F"), labels=c("downstream (B)", "middle (C)", "upstream (D)"))
+
+#ggsave("../figures/water_denitrification_boxplot.png", plot=last_plot(), device=NULL, path=NULL, scale=1, width=7, height=5, dpi=300, limitsize=TRUE)
+```
+
+# Diversity Function Plots
+```{r}
+#graph baseflow all sample types only - graph PD vs denitrification, graph OTU richness vs denitrification
+bf.phylo.fxn.full <- cbind(bf.eff, bf.bac)
+bf.phylo.fxn <- bf.phylo.fxn.full[,-c(1:3)]
+
+#graph denitrification x alpha diversity (PD)
+p <- ggplot(bf.phylo.fxn, aes(x=Phylo, y=Rate, shape=as.factor(Location), color=as.factor(Type))) +
+    scale_color_manual(name="Sample Type", 
+                      labels = c("stream bed", "stream bank", "water"), 
+                      values = c("brown","orange", "darkblue")) +
+                      geom_point(size=4) +
+    scale_shape_manual(name="Location", 
+                       labels = c("downstream (B)", "middle (C)", "upstream (D)"), 
+                       values = c(17,15,19))
+denitrif.phylo <- p + 
+              theme_bw() + 
+              theme(panel.grid.major = element_blank(), 
+                    panel.grid.minor = element_blank(), 
+                    axis.line = element_line(colour = "black")) +
+              theme(axis.title=element_text(vjust=1,size=16), 
+                    axis.text=element_text(size=16), 
+                    axis.text.x = element_text(vjust=0.65, hjust=0.5, size=16), 
+                    panel.border = element_rect(colour = "black",size=1)) + 
+              theme(axis.ticks.length=unit(0.3,"cm")) + 
+              labs(x = "Phylogenetic Diversity", 
+                   y = (expression(paste("Denitrification (ng N"[2],"O (g DM)"^-{1}," hr"^-{1},")")))) +   
+              theme(strip.text.x = element_text(size=16, face="bold"), 
+                    strip.text.y = element_text(size=16, face="bold"), 
+                    strip.background = element_rect(colour="black", fill="white", size=1))
+denitrif.phylo
+
+#ggsave("../figures/baseflow_denitrif_PD.png", plot=last_plot(), device=NULL, path=NULL, scale=1, width=7, height=5, dpi=300, limitsize=TRUE)
+
+#graph denitrification x alpha diversity (OTU richness)
+p <- ggplot(bf.phylo.fxn, aes(x=S, y=Rate, shape=as.factor(Location), color=as.factor(Type))) +
+    scale_color_manual(name="Sample Type", 
+                      labels = c("stream bed", "stream bank", "water"), 
+                      values = c("brown","orange", "darkblue")) +
+                      geom_point(size=4) +
+    scale_shape_manual(name="Location", 
+                       labels = c("downstream (B)", "middle (C)", "upstream (D)"), 
+                       values = c(17,15,19))
+denitrif.OTUrichness <- p + 
+              theme_bw() + 
+              theme(panel.grid.major = element_blank(), 
+                    panel.grid.minor = element_blank(), 
+                    axis.line = element_line(colour = "black")) +
+              theme(axis.title=element_text(vjust=1,size=16), 
+                    axis.text=element_text(size=16), 
+                    axis.text.x = element_text(vjust=0.65, hjust=0.5, size=16), 
+                    panel.border = element_rect(colour = "black",size=1)) + 
+              theme(axis.ticks.length=unit(0.3,"cm")) + 
+              labs(x = "OTU Richness", 
+                   y = (expression(paste("Denitrification (ng N"[2],"O (g DM)"^-{1}," hr"^-{1},")")))) +   
+              theme(strip.text.x = element_text(size=16, face="bold"), 
+                    strip.text.y = element_text(size=16, face="bold"), 
+                    strip.background = element_rect(colour="black", fill="white", size=1))
+denitrif.OTUrichness
+
+#ggsave("../figures/baseflow_denitrif_OTUrichness.png", plot=last_plot(), device=NULL, path=NULL, scale=1, width=7, height=5, dpi=300, limitsize=TRUE)
+
+#graph OTU richness x alpha diversity (PD)
+p <- ggplot(bf.phylo.fxn, aes(x=Phylo, y=S, shape=as.factor(Location), color=as.factor(Type))) +
+    scale_color_manual(name="Sample Type", 
+                      labels = c("stream bed", "stream bank", "water"), 
+                      values = c("brown","orange", "darkblue")) +
+                      geom_point(size=4) +
+    scale_shape_manual(name="Location", 
+                       labels = c("downstream (B)", "middle (C)", "upstream (D)"), 
+                       values = c(17,15,19))
+phylo.OTUrichness <- p + 
+              theme_bw() + 
+              theme(panel.grid.major = element_blank(), 
+                    panel.grid.minor = element_blank(), 
+                    axis.line = element_line(colour = "black")) +
+              theme(axis.title=element_text(vjust=1,size=16), 
+                    axis.text=element_text(size=16), 
+                    axis.text.x = element_text(vjust=0.65, hjust=0.5, size=16), 
+                    panel.border = element_rect(colour = "black",size=1)) + 
+              theme(axis.ticks.length=unit(0.3,"cm")) + 
+              labs(x = "Phylogenetic Diversity", y = "OTU Richness") +   
+              theme(strip.text.x = element_text(size=16, face="bold"), 
+                    strip.text.y = element_text(size=16, face="bold"), 
+                    strip.background = element_rect(colour="black", fill="white", size=1))
+phylo.OTUrichness
+
+#ggsave("../figures/bf_phylo_OTUrichness.png", plot=last_plot(), device=NULL, path=NULL, scale=1, width=7, height=5, dpi=300, limitsize=TRUE)
+```
+
+```{r Denit ~ OTU richness regression}
+Denit_by_richness_regress_BK <- lm(Rate~S, data=bf.phylo.fxn, subset = Type=="BK")
+summary(Denit_by_richness_regress_BK)
+
+# Repeat with other sample types:
+
+
+
+Denit_S_reg_plot <- ggplot(bf.phylo.fxn, aes(x=S, y=Rate, color=Type, shape=Type))+
+    theme_bw() + 
+    geom_point(size=10)+
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.line 
+          =element_line(colour = "black")) + 
+    scale_color_manual(values=c("#D55E00", "#009E73", "#0072B2"), name="Sample Type", labels = c("streambed", "streambank", "water")) +
+    scale_shape_manual(values = c(17,15,19), name = "Sample Type", labels = c("streambed", "streambank", "water")) +
+    theme(axis.title=element_text(vjust=1,size=40,face="bold", margin=margin(r=10)),
+          axis.text=element_text(size=40), axis.text.x = element_text(vjust=0.65, hjust=0.5, angle=0, 
+          size=40), panel.border = element_rect(colour = "black",size=1)) + 
+    theme(axis.ticks.length=unit(0.3,"cm")) + 
+          labs(x = "Species Richness", y = (expression(paste("Denitrification (ng N"[2],"O (g DM)"^-{1}," hr"^-{1},")")))) + 
+    theme(strip.text.x = element_text(size=40, face="bold"), 
+          strip.text.y = element_text(size=40, face="bold"), 
+          strip.background = element_rect(colour="black", fill="white", size=1))+
+    stat_poly_eq(aes(x=S, y=Rate, label = paste(after_stat(f.value.label), after_stat(adj.rr.label), after_stat(p.value.label), sep = "*\", \"*")), data = bf.phylo.fxn, formula = y ~ x, method = "lm", label.y = "top", label.x = "right", size = 8)+
+    geom_smooth(aes(x=S, y=Rate, color=Type), formula = y ~ x, method=lm, se=T)+
+    theme(legend.text=element_text(size=14), legend.title = element_text(size=14))+
+    theme(legend.position = "none")
+
+Denit_S_reg_plot
+
+#ggsave("../figures/ASM_2024/Denit_S_reg_plot.png", plot=Denit_S_reg_plot, device="png", path=NULL, scale=1, width=10, height=7, dpi=300, limitsize=TRUE)
+
+# For ASM 2024 poster:
+#ggsave("../../../../../Desktop/ASM_2024_creativeCloud/CurrentPosterDraft/BiggerRFigs/Regression.png", plot=Denit_S_reg_plot, device="png", path=NULL, scale=1, width=15, height=12, dpi=300, limitsize=TRUE)
+```
+```{r Denit ~ OTU richness plot}
+#graph denitrification x alpha diversity (OTU richness)
+p <- ggplot(bf.phylo.fxn, aes(x=S, y=Rate))
+    #scale_color_manual(name="Sample Type", 
+                      #labels = c("stream bed", "stream bank", "water"), 
+                      #values = c("brown","orange", "darkblue")) +
+                      #geom_point(size=4) +
+    #scale_shape_manual(name="Location", 
+                       #labels = c("downstream (B)", "middle (C)", "upstream (D)"), 
+                       #values = c(17,15,19))
+denitrif.OTUrichness <- p + 
+              theme_bw() + 
+              theme(panel.grid.major = element_blank(), 
+                    panel.grid.minor = element_blank(), 
+                    axis.line = element_line(colour = "black")) +
+              theme(axis.title=element_text(vjust=1,size=16), 
+                    axis.text=element_text(size=16), 
+                    axis.text.x = element_text(vjust=0.65, hjust=0.5, size=16), 
+                    panel.border = element_rect(colour = "black",size=1)) + 
+              theme(axis.ticks.length=unit(0.3,"cm")) + 
+              labs(x = "OTU Richness", 
+                   y = (expression(paste("Denitrification (ng N"[2],"O (g DM)"^-{1}," hr"^-{1},")")))) +   
+              theme(strip.text.x = element_text(size=16, face="bold"), 
+                    strip.text.y = element_text(size=16, face="bold"), 
+                    strip.background = element_rect(colour="black", fill="white", size=1))+
+    stat_poly_eq(aes(x=S, y=Rate, label = paste(after_stat(f.value.label), after_stat(adj.rr.label), after_stat(p.value.label), sep = "*\", \"*")), data = bf.phylo.fxn, formula = y ~ x, method = "lm", label.y = "top",label.x = "left")+
+   geom_smooth(aes(x=S, y=Rate), formula = y ~ x, method=lm, se=T, color="black")
+denitrif.OTUrichness
+
+#ggsave("../figures/baseflow_denitrif_OTUrichness.png", plot=last_plot(), device=NULL, path=NULL, scale=1, width=7, height=5, dpi=300, limitsize=TRUE)
+
+```
+
+
+
+# Diversity Metrics - Hypothesis Testing - baseflow only (sed and water)
+```{r Diversity Metrics - Bacteria, echo=TRUE}
+# Rarefy Abundances (min abundance is 7172. We are sampling to 7100)
+#baseflow and stormflow
+#df.design.otus <-cbind(design.otu,otus)
+#as.data.frame(df.design.otus)
+df.basestorm <- subset(df.design.otus, Sample_Type == "W")
+str(df.basestorm)
+
+otus <- df.basestorm[,-c(1:6)]
+design.basestorm <- df.basestorm[,c(1:6)]
+
+rowSums(otus)
+#TC_48 68; TC_49 405; TC_50 226; TC_51 328
+
+# OTU table - removed low abundance samples
+otus.w <- otus[which(rowSums(otus) >= 100), ]
+dim(otus.w)
+
+min(rowSums(otus.w))
+otus.w.r <- rrarefy(otus.w, 200)
+
+# Fisher's Alpha
+fisher.w <- fisher.alpha(otus.w.r)
+
+# Species Richness
+richness.w <- rowSums((otus.w >= 1))
+
+# Shannon Diversity
+shannon.w <- diversity(otus.w.r, "shannon")
+
+# Simpson's Evenness
+simp.even.w <- apply(otus.w.r, 1, simp_even)
+
+#Pielou’s evenness
+J.w <- shannon/log(specnumber(otus.w.r[,-c(1:1)]))
+
+# OTU table - odd sites in bacterial composition data and remove in design file
+odd.sites.w <- c("TC_48")
+
+otu_final <- otus.w[setdiff(rownames(otus.w), odd.sites.w), ]
+design_final <- design.basestorm[setdiff(rownames(design.basestorm), odd.sites.w), ]
+bfsf.basestorm <- cbind(design_final, otu_final)
+
+#combined richness, diversity, evenness
+basestorm.diversity <- cbind(design_final,richness.w,shannon.w,simp.even.w,J.w)
+```
+
+#Plot OTU richness - basestorm - water
+```{r Plot - OTU richness, echo=TRUE}
+# # ANOVA - update
+aov.bfsf=aov(richness.w~Location*Storm,data=basestorm.diversity)
+summary(aov.bfsf)
+posthocD <-TukeyHSD(aov.bfsf,"Location:Storm",conf.level=0.95)
+posthocD
+
+# Graphing OTU richness
+p <- ggplot(basestorm.diversity, aes(x=Location, y=richness.w, color=as.factor(Storm))) + geom_boxplot() +
+      geom_point(aes(color=factor(Storm)), size=2, position = position_jitterdodge()) +   
+      scale_color_manual(name="Flow", 
+                         values=c("cyan", "darkblue"), 
+                         labels = c("baseflow", "stormflow")) 
+p + theme_bw() + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.line 
+          =element_line(colour = "black")) + 
+    theme(axis.title=element_text(vjust=1,size=14,face="bold"),
+          axis.text=element_text(size=14), axis.text.x = element_text(vjust=0.65, hjust=0.5, 
+          size=14), panel.border = element_rect(colour = "black",size=1)) + 
+    theme(axis.ticks.length=unit(0.3,"cm")) + labs(x = "Location", y = "OTU richness") + 
+    theme(strip.text.x = element_text(size=14, face="bold"), strip.text.y =   
+          element_text(size=14, face="bold"), strip.background = element_rect(colour="black",
+          fill="white", size=1)) 
+#+scale_x_discrete(breaks=c("B", "C", "D"), labels=c("downstream (B)", "middle (C)", "upstream (D)"))
+
+#ggsave("../figures/basestorm_OTUrichness_boxplots.png", plot=last_plot(), device=NULL, path=NULL, scale=1, width=7, height=5, dpi=300, limitsize=TRUE)
+```
+
+# Simple Hypothesis Testing Bacterial Community Composition - baseflow + stormflow only
+```{r}
+#PERMANOVA on base+stormflow
+#bfsf.basestorm <- cbind(design_final, otu_final)
+
+# Make Relative Abundance Matrix
+otus <- bfsf.basestorm[,-c(1:6)]
+design.bfsf <- bfsf.basestorm[,c(1:6)]
+
+# Remove OTUs with less than two occurrences across all sites
+otus.bfsf <- otus[, which(colSums(otus) >= 2)]
+
+relabun.w <- otus.bfsf
+for (i in 1:dim(otus.bfsf)[1]) {
+  relabun.w[i, ] <- otus.bfsf[i, ]/sum(otus.bfsf[i,])
+}
+
+df.basestorm <-cbind(design.bfsf, relabun.w)
+
+#df.basestorm
+adonis = adonis2(df.basestorm[,-c(1:6)] ~ Storm * Location, method = "bray", data = df.basestorm, perm=1000)
+adonis
+```
+## Principal Coordinates Ordination - base+stormflow water
+```{r}
+# Principal Coordinates Analysis
+sampleREL.dist <- vegdist(df.basestorm[,-c(1:6)], method="bray")
+
+TC_pcoa <- cmdscale(sampleREL.dist, k=3, eig=TRUE, add=FALSE)
+  # Classical (Metric) Multidimensional Scaling; returns PCoA coordinates
+  # eig=TRUE returns eigenvalues; k = # of dimensions to calculate
+
+explainvar1 <- round(TC_pcoa$eig[1] / sum(TC_pcoa$eig), 3) * 100
+explainvar2 <- round(TC_pcoa$eig[2] / sum(TC_pcoa$eig), 3) * 100
+sum.eig <- sum(explainvar1, explainvar2)
+explainvar1 #28.7
+explainvar2 #22.4
+
+pcoa.groups <- paste(design.bfsf$Storm, design.bfsf$Location, sep = "_")
+
+pcoa.points <- data.frame(TC_pcoa$points, group = pcoa.groups)
+
+# Calculate Centroids (mean and SE)
+pcoa.L.centroids <- melt(pcoa.points, id="group", measure.vars = c("X1", "X2"))
+pcoa.centroids <- cast(pcoa.L.centroids, variable ~ group, mean)
+pcoa.centroids.se <- cast(pcoa.L.centroids, variable ~ group, se)
+pcoa.centroids.sd <- cast(pcoa.L.centroids, variable ~ group, sd)
+```
+
+## Principal Coordinates Ordination - base+stormflow - water
+```{r Ordination (PCoA) - Bacteria, include=FALSE}
+# Combine
+pcoa.cent.dataframe <- cbind(t(pcoa.centroids), t(pcoa.centroids.se))
+colnames(pcoa.cent.dataframe) <- c("V1", "V2", "V1e", "V2e")
+pcoa.cent.treats <- rownames(pcoa.cent.dataframe)
+
+trt.flow <- c("baseflow","baseflow","baseflow","baseflow",
+              "stormflow","stormflow","stormflow","stormflow","stormflow","stormflow","stormflow","stormflow")
+trt.loc <- c("A","B","C","D","A","B","C","D","E","F","G","I")
+pcoa.cent.dataframe.trts <- as.data.frame(pcoa.cent.dataframe)
+pcoa.cent.dataframe.trts$trt.flow <- as.factor(trt.flow)
+pcoa.cent.dataframe.trts$trt.loc <- as.factor(trt.loc)
+
+#Plot
+df1a <- as.data.frame(pcoa.cent.dataframe.trts)
+plot1a <- ggplot(df1a, aes(x=V1, y=V2, colour=df1a$trt.flow, shape = df1a$trt.loc, label=trt.loc)) + theme_bw() 
+plot1a + theme(panel.grid.major = element_blank(), 
+              panel.grid.minor = element_blank(), 
+              axis.line = element_line(colour = "black")) + 
+              theme(panel.background = element_blank()) + 
+geom_point(aes(colour=trt.flow), size=5, stroke = 1.25, show.legend = TRUE) + geom_text(hjust = 0, nudge_x = 0.05) +
+geom_errorbarh(aes(xmax=V1+V1e, xmin=V1-V1e, height=0.01), colour="black") + 
+geom_errorbar(aes(ymax=V2+V2e, ymin=V2-V2e, width=0.01), colour="black") +
+scale_colour_manual(labels = c("baseflow", "stormflow"), 
+                    values = c("cyan", "darkblue")) + 
+scale_shape_manual(labels = c("A","B","C","D","E","F","G","I"), 
+                   values = c(15,16,17,18,24,21,22,23)) +
+      theme(axis.title = element_text(size=14), axis.text = element_text(size=14),
+          axis.text.x = element_text(size=14), 
+          panel.border = element_rect(colour = "black", size = 1.25)) + 
+      theme(axis.ticks.length = unit(0.3, "cm")) + 
+          xlab("PCoA 1 (28.7%)") + ylab("PCoA 2 (22.4%)") +
+          labs(shape = "Location", colour = "Storm")
+          #guides(shape = guide_legend(override.aes = list(size = 4, color="gray70")), color = "none")
+
+#ggsave("../figures/TC_ordination_water_basestorm.png", plot=last_plot(), device=NULL, path=NULL, scale=1, width=7, height=5, dpi=300, limitsize=TRUE)
+```
+
+# Phylogenetic Diversity - water only
+```{r Phylogenetic Diversity, include=FALSE}
+# Reorder Tree
+which(tree$edge.length < 0.0000001)
+#phylo.d <- pd(otus.r, tree, include.root = F) ##CHECK - use rarefied?
+#df.basestorm <-cbind(design.bfsf, relabun.w) #water only
+
+phylo.w.d <- pd(otus.bfsf, tree, include.root = F)
+
+design.w.r <- design.bfsf[which(rownames(design.bfsf) %in% rownames(otus.bfsf)), ]
+
+bfsf.bac <- as.data.frame(matrix(NA, dim(design.w.r)[1], 10))
+colnames(bfsf.bac) <- c("Sample", "Location", "Time", "Type", "Replicate", 
+                       "S", "F_alpha", "S_even", "Shannon", "Phylo")
+bfsf.bac$Sample <- rownames(design.w.r)
+bfsf.bac$Location <- design.w.r$Location
+bfsf.bac$Time <- design.w.r$Storm
+bfsf.bac$Type <- design.w.r$Sample_Type
+bfsf.bac$Replicate <- design.w.r$Field_replicate
+for(i in 1:length(rownames(design.w.r))){
+  temp <- rownames(design.w.r)[i]
+  bfsf.bac$S[i] <- richness[which(names(richness.w) == temp)]
+  bfsf.bac$F_alpha[i] <- fisher[which(names(fisher.w) == temp)]
+  bfsf.bac$S_even[i] <- simp.even[which(names(simp.even.w) == temp)]
+  bfsf.bac$Shannon[i] <- shannon[which(names(shannon.w) == temp)]
+  bfsf.bac$Phylo[i] <- phylo.d[which(rownames(phylo.w.d) == temp), 1]
+}
+
+# Reorganize
+#bfsf.bac.m <- melt(bfsf.bac, id = c("Sample", "Location", "Time", "Type"))
+#bfsf.bac.c <- cast(data = bfsf.bac.m, Location + Type ~ variable, c(mean, se), na.rm=T)
+
+#bfsf.bac.c <- as.data.frame(bfsf.bac.c)
+#bfsf.bac.m <- as.data.frame(bfsf.bac.m)
+
+# # ANOVA - update - used code above richness.w (not-rarefied)
+aov.wtr=aov(S~Location*Time, data=bfsf.bac)
+summary(aov.wtr)
+posthocD <-TukeyHSD(aov.wtr,"Location:Time",conf.level=0.95)
+posthocD
+```
+
+# Phylo Diversity Plots
+```{r}
+# # ANOVA - update
+aov.wtr.PD=aov(Phylo~Location*Time, data=bfsf.bac)
+summary(aov.wtr.PD)
+posthocD <-TukeyHSD(aov.wtr.PD,"Location:Time",conf.level=0.95)
+posthocD
+
+#boxplots
+p <- ggplot(bfsf.bac, aes(x=Location, y=Phylo, color=as.factor(Time))) + geom_boxplot() +
+      geom_point(aes(color=factor(Time)), size=2, position = position_jitterdodge()) +   
+      scale_color_manual(name="Time", 
+                         values=c("cyan", "darkblue"), 
+                         labels = c("baseflow", "stormflow")) 
+p + theme_bw() + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), axis.line 
+          =element_line(colour = "black")) + 
+    theme(axis.title=element_text(vjust=1,size=14,face="bold"),
+          axis.text=element_text(size=14), axis.text.x = element_text(vjust=0.65, hjust=0.5, 
+          size=14), panel.border = element_rect(colour = "black",size=1)) + 
+    theme(axis.ticks.length=unit(0.3,"cm")) + labs(x = "Location", y = "Phylogenetic Diversity") + 
+    theme(strip.text.x = element_text(size=14, face="bold"), strip.text.y =   
+          element_text(size=14, face="bold"), strip.background = element_rect(colour="black",
+          fill="white", size=1)) 
+
+#ggsave("../figures/basestorm_PD_boxplots.png", plot=last_plot(), device=NULL, path=NULL, scale=1, width=7, height=5, dpi=300, limitsize=TRUE)
+```
