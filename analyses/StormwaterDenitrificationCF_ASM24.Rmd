@@ -19,7 +19,7 @@ Does sample type (sed vs. water) matter?
 # Initial Setup
 ```{r, results="hide", message=FALSE}
 rm(list=ls())
-setwd("~/GitHub/Denitrification_Enzyme_Assays/TownCreek/StormwaterDenitrification_Bean2015/analyses/")
+setwd("~/GitHub/Denitrification_Enzyme_Assays/TownCreek/StormwaterDenitrification_Bean2015_submodule/analyses/")
 se <- function(x, ...){sd(x, na.rm = TRUE)/sqrt(length(na.omit(x)))}
 ci <- function(x, ...){1.96 * sd(x,na.rm = TRUE)}
 
@@ -444,7 +444,7 @@ plot2a
 #ggsave("../figures/ASM_2024/TC_ordination_type_baseflow_envfit.png", plot=plot2a, device=NULL, path=NULL, scale=1, width=10, height=7, dpi=300, limitsize=TRUE)
 
 # For ASM 2024 poster:
-ggsave("../../../../../Desktop/ASM_2024_creativeCloud/CurrentPosterDraft/BiggerRFigs/PCoA.png", plot=plot2a, device=NULL, path=NULL, scale=1, width=18, height=12, dpi=600, limitsize=F)
+#ggsave("../../../../../Desktop/ASM_2024_creativeCloud/CurrentPosterDraft/BiggerRFigs/PCoA.png", plot=plot2a, device=NULL, path=NULL, scale=1, width=18, height=12, dpi=600, limitsize=F)
 ```
 
 # Bacterial community indicator species - baseflow only
